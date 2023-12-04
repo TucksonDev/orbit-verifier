@@ -117,8 +117,8 @@ export const precompilesHandler = async (orbitHandler: OrbitHandler) => {
 
   console.log('Fee receivers');
   console.log('--------------');
-  console.log(`Infrastructure fee receivers: ${infraFeeAccount}`);
-  console.log(`Network fee receivers: ${networkFeeAccount}`);
+  console.log(`Infrastructure fee receiver (L2BaseFee): ${infraFeeAccount}`);
+  console.log(`Network fee receiver (L2SurplusFee): ${networkFeeAccount}`);
   console.log('');
 
   //

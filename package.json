@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@arbitrum/sdk": "^3.1.13",
+    "dotenv": "^16.3.1",
     "ethers": "^6.9.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.3.2",
