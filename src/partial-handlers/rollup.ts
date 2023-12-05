@@ -1,35 +1,82 @@
 import { RollupCore__factory } from '@arbitrum/sdk/dist/lib/abi/factories/RollupCore__factory';
 import { Ownable__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Ownable__factory';
-//import { ProxyAdmin__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ProxyAdmin__factory';
 import { OrbitHandler } from '../lib/client';
-import { Abi, RollupCreatedEvent } from '../lib/types';
-import { getCurrentAdminOfContract, getRollupCreatedLogFromRollupAddress } from '../lib/utils';
+import { Abi, RollupInformationFromRollupCreatedEvent } from '../lib/types';
+import {
+  UpgradeExecutorRoles,
+  contractIsERC20,
+  getCurrentAdminOfContract,
+  getRollupInformationFromRollupCreator,
+  getUpgradeExecutorPrivilegedAccounts,
+} from '../lib/utils';
+import { zeroAddress } from 'viem';
 
-export const rollupHandler = async (orbitHandler: OrbitHandler, rollupAddress: `0x${string}`) => {
+export const rollupHandler = async (
+  orbitHandler: OrbitHandler,
+  rollupAddress: `0x${string}`,
+): Promise<string[]> => {
+  //
+  // Initialization
+  //
+  const warningMessages: string[] = [];
+
   //
   // Get RollupCreated log
   //
   console.log('Information from RollupCreated event');
   console.log('--------------');
+  let rollupCreatorAddress = '';
   let proxyAdminAddress = '';
   let upgradeExecutorAddress = '';
-  const rollupCreatedLogAddresses = (await getRollupCreatedLogFromRollupAddress(
-    orbitHandler,
-    'parent',
-    rollupAddress,
-  )) as RollupCreatedEvent;
-  if (Object.keys(rollupCreatedLogAddresses).length <= 0) {
-    console.log(`RollupCreated event could not be parsed. Continuing...`);
-  } else {
-    console.log(`Addresses on RollupCreated event:`, rollupCreatedLogAddresses);
+  let nativeTokenAddress = '';
+  try {
+    const rollupInformation = (await getRollupInformationFromRollupCreator(
+      orbitHandler,
+      'parent',
+      rollupAddress,
+    )) as RollupInformationFromRollupCreatedEvent;
+    rollupCreatorAddress = rollupInformation.rollupCreatorAddress;
+    console.log(`Rollup created with RollupCreator at ${rollupCreatorAddress}`);
 
-    // Getting ProxyAdmin and UpgradeExecutor if present
-    if (rollupCreatedLogAddresses.adminProxy) {
-      proxyAdminAddress = rollupCreatedLogAddresses.adminProxy;
+    if (
+      !rollupInformation.rollupAddresses ||
+      Object.keys(rollupInformation.rollupAddresses).length <= 0
+    ) {
+      warningMessages.push(
+        `RollupCreated event could not be parsed for RollupCreator ${rollupCreatorAddress}`,
+      );
+      warningMessages.push(`There won't be ProxyAdmin or UpgradeExecutor verifications`);
+      console.log(`RollupCreated event could not be parsed. Continuing...`);
+    } else {
+      console.log(`Addresses on RollupCreated event:`, rollupInformation.rollupAddresses);
+
+      // Getting ProxyAdmin and UpgradeExecutor if present
+      if (rollupInformation.rollupAddresses.adminProxy) {
+        proxyAdminAddress = rollupInformation.rollupAddresses.adminProxy;
+      } else {
+        warningMessages.push(
+          `ProxyAdmin address not found. There won't be ProxyAdmin verifications`,
+        );
+      }
+      if (rollupInformation.rollupAddresses.upgradeExecutor) {
+        upgradeExecutorAddress = rollupInformation.rollupAddresses.upgradeExecutor;
+      } else {
+        warningMessages.push(
+          `UpgradeExecutor address not found. There won't be UpgradeExecutor verifications`,
+        );
+      }
+
+      // Getting nativeToken if present
+      if (rollupInformation.rollupAddresses.nativeToken) {
+        nativeTokenAddress = rollupInformation.rollupAddresses.nativeToken;
+      }
     }
-    if (rollupCreatedLogAddresses.upgradeExecutor) {
-      upgradeExecutorAddress = rollupCreatedLogAddresses.upgradeExecutor;
-    }
+  } catch (err) {
+    warningMessages.push(
+      `RollupCreated event could not be found for RollupCreator ${rollupCreatorAddress}. Error: ${err}`,
+    );
+    warningMessages.push(`There won't be ProxyAdmin or UpgradeExecutor verifications`);
+    console.log(`Error while finding the RollupCreated event: ${err}`);
   }
   console.log('');
 
@@ -104,7 +151,17 @@ export const rollupHandler = async (orbitHandler: OrbitHandler, rollupAddress: `
         : ''
     }`,
   );
-  console.log(`Rollup admin: ${rollupAdmin}`);
+  console.log(
+    `Rollup admin: ${rollupAdmin}${
+      upgradeExecutorAddress
+        ? ' (' +
+          (upgradeExecutorAddress == rollupAdmin
+            ? 'Is UpgradeExecutor'
+            : 'Is NOT UpgradeExecutor') +
+          ')'
+        : ''
+    }`,
+  );
   console.log(
     `Bridge admin: ${bridgeAdmin}${
       proxyAdminAddress
@@ -138,9 +195,28 @@ export const rollupHandler = async (orbitHandler: OrbitHandler, rollupAddress: `
   console.log('');
 
   //
-  // ProxyAdmin and UpgradeExecutor verification
+  // ProxyAdmin verification
   //
   if (proxyAdminAddress) {
+    //
+    // Rollup contracts verifications
+    //
+    if (bridgeAdmin != proxyAdminAddress) {
+      warningMessages.push(`Bridge admin is not the ProxyAdmin`);
+    }
+    if (inboxAdmin != proxyAdminAddress) {
+      warningMessages.push(`Inbox admin is not the ProxyAdmin`);
+    }
+    if (sequencerInboxAdmin != proxyAdminAddress) {
+      warningMessages.push(`SequencerInbox admin is not the ProxyAdmin`);
+    }
+    if (outboxAdmin != proxyAdminAddress) {
+      warningMessages.push(`Outbox admin is not the ProxyAdmin`);
+    }
+
+    //
+    // ProxyAdmin owner
+    //
     console.log('ProxyAdmin owner');
     console.log('--------------');
     const proxyAdminOwner = (await orbitHandler.readContract(
@@ -160,17 +236,114 @@ export const rollupHandler = async (orbitHandler: OrbitHandler, rollupAddress: `
           : ''
       }`,
     );
+
+    if (upgradeExecutorAddress && proxyAdminOwner != upgradeExecutorAddress) {
+      warningMessages.push(`ProxyAdmin owner is not the UpgradeExecutor`);
+    }
   } else {
     console.log(
       `ProxyAdmin verification was skipped because it was not found in the RollupCreated event.`,
     );
   }
+  console.log('');
+
+  //
+  // UpgradeExecutor verification
+  //
   if (upgradeExecutorAddress) {
-    // Verify UpgradeExecutor admin privileges
+    //
+    // Rollup contracts verifications
+    //
+    if (rollupOwner != upgradeExecutorAddress) {
+      warningMessages.push(`Rollup owner is not the UpgradeExecutor`);
+    }
+    if (rollupAdmin != upgradeExecutorAddress) {
+      warningMessages.push(`Rollup admin is not the UpgradeExecutor`);
+    }
+
+    //
+    // UpgradeExecutor privileged accounts
+    //
+    console.log('UpgradeExecutor privileged accounts');
+    console.log('--------------');
+    const upgradeExecutorPrivilegedAccounts = await getUpgradeExecutorPrivilegedAccounts(
+      orbitHandler,
+      'parent',
+      upgradeExecutorAddress as `0x${string}`,
+    );
+    if (!upgradeExecutorPrivilegedAccounts) {
+      console.log(`No privileged accounts found in the UpgradeExecutor contract`);
+    } else {
+      Object.keys(upgradeExecutorPrivilegedAccounts).forEach((privilegedAccount) => {
+        const accountRoles = upgradeExecutorPrivilegedAccounts[
+          privilegedAccount as `0x${string}`
+        ].map((role) => {
+          if (role in UpgradeExecutorRoles) {
+            return UpgradeExecutorRoles[role];
+          } else {
+            return role;
+          }
+        });
+
+        console.log(`${privilegedAccount}: ${accountRoles.join(',')}`);
+      });
+    }
   } else {
     console.log(
       `UpgradeExecutor verification was skipped because it was not found in the RollupCreated event.`,
     );
   }
   console.log('');
+
+  //
+  // Native token
+  //
+  console.log('Native token verification');
+  console.log('--------------');
+  if (!nativeTokenAddress || nativeTokenAddress == zeroAddress) {
+    console.log(`Native token is ETH`);
+  } else {
+    const nativeTokenIsERC20 = await contractIsERC20(
+      orbitHandler,
+      'parent',
+      nativeTokenAddress as `0x${string}`,
+    );
+    if (nativeTokenIsERC20) {
+      console.log(`Native token ${nativeTokenIsERC20} is a contract`);
+    } else {
+      console.log(`Native token ${nativeTokenAddress} is NOT a contract`);
+      warningMessages.push(`Native token ${nativeTokenAddress} is NOT a contract`);
+    }
+  }
+  console.log('');
+
+  //
+  // Stake token
+  //
+  console.log('Stake token verification');
+  console.log('--------------');
+  const stakeTokenAddress = (await orbitHandler.readContract(
+    'parent',
+    rollupAddress,
+    RollupCore__factory.abi as Abi,
+    'stakeToken',
+  )) as `0x${string}`;
+  if (stakeTokenAddress == zeroAddress) {
+    console.log(`Stake token is ETH`);
+  } else {
+    const stakeTokenIsERC20 = await contractIsERC20(
+      orbitHandler,
+      'parent',
+      stakeTokenAddress as `0x${string}`,
+    );
+    if (stakeTokenIsERC20) {
+      console.log(`Stake token ${stakeTokenAddress} is a contract`);
+    } else {
+      console.log(`Stake token ${stakeTokenAddress} is NOT a contract`);
+      warningMessages.push(`Stake token ${stakeTokenAddress} is NOT a contract`);
+    }
+  }
+  console.log('');
+
+  return warningMessages;
 };

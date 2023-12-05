@@ -1,5 +1,5 @@
-import { BlockNumber, BlockTag, GetLogsParameters, createPublicClient, http } from 'viem';
-import { defineChainInformation, getChainInfoFromChainId } from '../utils';
+import { BlockNumber, BlockTag, GetLogsParameters, Hex, createPublicClient, http } from 'viem';
+import { defineChainInformation, getChainInfoFromChainId } from '../lib/utils';
 import { Abi, AbiEventItem } from './types';
 
 export type ChainLayer = 'parent' | 'orbit';
@@ -28,6 +28,16 @@ export class OrbitHandler {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
     const result = await client.getBytecode({
       address,
+    });
+
+    return result;
+  };
+
+  getStorageAt = async (chainLayer: ChainLayer, address: `0x${string}`, slot: Hex) => {
+    const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    const result = await client.getStorageAt({
+      address,
+      slot,
     });
 
     return result;

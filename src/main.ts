@@ -1,4 +1,5 @@
 import { OrbitHandler } from './lib/client';
+import { factoryDeploymentsHandler } from './partial-handlers/factoryDeployments';
 import { precompilesHandler } from './partial-handlers/precompiles';
 import { rollupHandler } from './partial-handlers/rollup';
 import 'dotenv/config';
@@ -23,10 +24,38 @@ const orbitHandler = new OrbitHandler(
 
 const main = async () => {
   // Rollup information
-  await rollupHandler(orbitHandler, process.env.ROLLUP_ADDRESS as `0x${string}`);
+  const rollupWarningMessages = await rollupHandler(
+    orbitHandler,
+    process.env.ROLLUP_ADDRESS as `0x${string}`,
+  );
 
   // Precompiles information
-  await precompilesHandler(orbitHandler);
+  const precompilesWarningMessages = await precompilesHandler(orbitHandler);
+
+  // Factory deployments information
+  const factoryDeploymentWarningMessages = await factoryDeploymentsHandler(orbitHandler);
+
+  // Rendering warning messages
+  const warningMessages = [
+    ...rollupWarningMessages,
+    ...precompilesWarningMessages,
+    ...factoryDeploymentWarningMessages,
+  ];
+
+  console.log(`*****************`);
+  console.log(`Warning messages:`);
+  console.log(`*****************`);
+  if (warningMessages.length > 0) {
+    console.log(
+      [
+        ...rollupWarningMessages,
+        ...precompilesWarningMessages,
+        ...factoryDeploymentWarningMessages,
+      ].join('\n'),
+    );
+  } else {
+    console.log(`No messages`);
+  }
 };
 
 // Calling main

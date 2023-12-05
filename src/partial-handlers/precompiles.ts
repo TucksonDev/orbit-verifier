@@ -16,7 +16,12 @@ import { Abi } from '../lib/types';
 //
 const ARB_AGGREGATOR_ADDRESS = '0x000000000000000000000000000000000000006D';
 
-export const precompilesHandler = async (orbitHandler: OrbitHandler) => {
+export const precompilesHandler = async (orbitHandler: OrbitHandler): Promise<string[]> => {
+  //
+  // Initialization
+  //
+  const warningMessages: string[] = [];
+
   //
   // Information from ArbAggregator
   //
@@ -144,4 +149,6 @@ export const precompilesHandler = async (orbitHandler: OrbitHandler) => {
   console.log(`Orbit chain id: ${chainId}`);
   console.log(`ArbOS version: ${arbOSVersion - nitroBaseArbOSVersion}`);
   console.log('');
+
+  return warningMessages;
 };

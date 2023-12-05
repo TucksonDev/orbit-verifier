@@ -16,7 +16,7 @@ export type AbiEventItem = {
 };
 export type AbiEvent = AbiEventItem[];
 
-export type RollupCreatedEvent = {
+export type RollupCreatedEventAddresses = {
   rollupAddress: `0x${string}`;
   nativeToken?: `0x${string}`;
   inboxAddress: `0x${string}`;
@@ -29,4 +29,9 @@ export type RollupCreatedEvent = {
   upgradeExecutor: `0x${string}`;
   validatorUtils: `0x${string}`;
   validatorWalletCreator: `0x${string}`;
+};
+
+export type RollupInformationFromRollupCreatedEvent = {
+  rollupCreatorAddress: `0x${string}`;
+  rollupAddresses?: RollupCreatedEventAddresses;
 };

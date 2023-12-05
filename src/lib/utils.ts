@@ -1,13 +1,177 @@
 import { ChainLayer, OrbitHandler } from './client';
-import { ERC1967Upgrade__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC1967Upgrade__factory';
 import { RollupCore__factory } from '@arbitrum/sdk/dist/lib/abi/factories/RollupCore__factory';
-import { AbiEventItem } from './types';
+import {
+  AbiEventItem,
+  RollupCreatedEventAddresses,
+  RollupInformationFromRollupCreatedEvent,
+} from './types';
 import { supportedRollupCreatedEvents } from './abis';
-import { decodeEventLog } from 'viem';
+import { defineChain, decodeEventLog, getAddress, trim } from 'viem';
+import { mainnet, arbitrum, arbitrumNova, arbitrumGoerli, arbitrumSepolia } from 'viem/chains';
 
-type AdminChangedArgs = {
-  previousAdmin: `0x${string}`;
-  newAdmin: `0x${string}`;
+// Supported Viem chains
+const supportedChains = { mainnet, arbitrum, arbitrumNova, arbitrumGoerli, arbitrumSepolia };
+
+type RoleGrantedLogArgs = {
+  role: `0x${string}`;
+  account: `0x${string}`;
+  sender: `0x${string}`;
+};
+
+type UpgradeExecutorPrivilegedAccounts = {
+  // Key: account
+  // Value: array of roles
+  [key: `0x${string}`]: `0x${string}`[];
+};
+
+const RoleGrantedEventAbi: AbiEventItem = {
+  inputs: [
+    {
+      indexed: true,
+      internalType: 'bytes32',
+      name: 'role',
+      type: 'bytes32',
+    },
+    {
+      indexed: true,
+      internalType: 'address',
+      name: 'account',
+      type: 'address',
+    },
+    {
+      indexed: true,
+      internalType: 'address',
+      name: 'sender',
+      type: 'address',
+    },
+  ],
+  name: 'RoleGranted',
+  type: 'event',
+};
+
+const RoleRevokedEventAbi: AbiEventItem = {
+  inputs: [
+    {
+      indexed: true,
+      internalType: 'bytes32',
+      name: 'role',
+      type: 'bytes32',
+    },
+    {
+      indexed: true,
+      internalType: 'address',
+      name: 'account',
+      type: 'address',
+    },
+    {
+      indexed: true,
+      internalType: 'address',
+      name: 'sender',
+      type: 'address',
+    },
+  ],
+  name: 'RoleGranted',
+  type: 'event',
+};
+
+export const UpgradeExecutorRoles: {
+  [key: `0x${string}`]: string;
+} = {
+  '0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63': 'executor',
+  '0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775': 'admin',
+};
+
+export const getChainInfoFromChainId = (chainId: number) => {
+  for (const chain of Object.values(supportedChains)) {
+    if ('id' in chain) {
+      if (chain.id === chainId) {
+        return chain;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+export const defineChainInformation = (chainId: number, chainRpc: string) => {
+  return defineChain({
+    id: chainId,
+    name: 'Orbit chain',
+    network: 'orbit',
+    nativeCurrency: {
+      name: 'ETH',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: {
+        http: [chainRpc],
+      },
+      public: {
+        http: [chainRpc],
+      },
+    },
+  });
+};
+
+export const getUpgradeExecutorPrivilegedAccounts = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  upgradeExecutorAddress: `0x${string}`,
+): Promise<UpgradeExecutorPrivilegedAccounts | undefined> => {
+  const privilegedAccounts: UpgradeExecutorPrivilegedAccounts = {};
+
+  //
+  // Find first the role granted events
+  //
+  const roleGrantedEvents = await orbitHandler.getLogs(
+    chainLayer,
+    upgradeExecutorAddress,
+    RoleGrantedEventAbi,
+    undefined,
+    'earliest',
+    'latest',
+  );
+  if (!roleGrantedEvents || roleGrantedEvents.length <= 0) {
+    return undefined;
+  }
+
+  roleGrantedEvents.forEach((roleGrantedEvent) => {
+    const account = (roleGrantedEvent.args as RoleGrantedLogArgs).account;
+    const role = (roleGrantedEvent.args as RoleGrantedLogArgs).role;
+
+    if (!(account in privilegedAccounts)) {
+      privilegedAccounts[account] = [];
+    }
+    privilegedAccounts[account].push(role);
+  });
+
+  //
+  // And then the role revoked events
+  //
+  const roleRevokedEvents = await orbitHandler.getLogs(
+    chainLayer,
+    upgradeExecutorAddress,
+    RoleRevokedEventAbi,
+    undefined,
+    'earliest',
+    'latest',
+  );
+  if (!roleRevokedEvents || roleRevokedEvents.length <= 0) {
+    return privilegedAccounts;
+  }
+
+  roleRevokedEvents.forEach((roleRevokedEvent) => {
+    const account = (roleRevokedEvent.args as RoleGrantedLogArgs).account;
+    const role = (roleRevokedEvent.args as RoleGrantedLogArgs).role;
+
+    const roleIndex = privilegedAccounts[account].findIndex((accRole) => accRole == role);
+    if (roleIndex >= 0) {
+      privilegedAccounts[account] = privilegedAccounts[account].splice(roleIndex, 1);
+    }
+  });
+
+  return privilegedAccounts;
 };
 
 export const getCurrentAdminOfContract = async (
@@ -15,35 +179,23 @@ export const getCurrentAdminOfContract = async (
   chainLayer: ChainLayer,
   contractAddress: `0x${string}`,
 ): Promise<`0x${string}` | undefined> => {
-  const adminChangedEvents = await orbitHandler.getLogs(
-    chainLayer,
-    contractAddress,
-    ERC1967Upgrade__factory.abi.filter(
-      (abiItem) => abiItem.type == 'event' && abiItem.name == 'AdminChanged',
-    )[0] as AbiEventItem,
-    undefined,
-    'earliest',
-    'latest',
-  );
-  if (!adminChangedEvents || adminChangedEvents.length <= 0) {
-    return undefined;
+  const slot = '0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103';
+  const adminAddress = await orbitHandler.getStorageAt(chainLayer, contractAddress, slot);
+  if (!adminAddress) {
+    return getAddress('0x');
   }
-
-  const latestAdminChangedLog = adminChangedEvents.reduce((latestLog, currentLog) => {
-    return !latestLog || currentLog.blockNumber! > latestLog.blockNumber! ? currentLog : latestLog;
-  });
-
-  return (latestAdminChangedLog.args as AdminChangedArgs).newAdmin;
+  return getAddress(trim(adminAddress));
 };
 
 //
 // Requiremenets to finding this information:
 //    - Rollup contract should have emitted a RollupInitialized event
-export const getRollupCreatedLogFromRollupAddress = async (
+//    - RollupCreator should have emitted a RollupCreated event
+export const getRollupInformationFromRollupCreator = async (
   orbitHandler: OrbitHandler,
   chainLayer: ChainLayer,
   rollupAddress: `0x${string}`,
-) => {
+): Promise<RollupInformationFromRollupCreatedEvent> => {
   // Step 1: find the RollupInitialized event from that Rollup contract
   const rollupInitializedEvents = await orbitHandler.getLogs(
     chainLayer,
@@ -71,7 +223,9 @@ export const getRollupCreatedLogFromRollupAddress = async (
   const transactionReceipt = await orbitHandler.getTransactionReceipt(chainLayer, transactionHash);
 
   // Step 4: find RollupCreated log
-  let rollupCreatedLog = {};
+  const rollupInformation: RollupInformationFromRollupCreatedEvent = {
+    rollupCreatorAddress: getAddress(transactionReceipt.to!),
+  };
   for (let i = 0; i < supportedRollupCreatedEvents.length; i++) {
     const currentRollupCreatedEventInfo = supportedRollupCreatedEvents[i];
     const rollupCreatedEventLog = transactionReceipt.logs.filter(
@@ -87,12 +241,26 @@ export const getRollupCreatedLogFromRollupAddress = async (
         data: rollupCreatedEventLog.data,
         topics: rollupCreatedEventLog.topics,
       });
-      rollupCreatedLog = decodedLog.args;
+      rollupInformation.rollupAddresses = decodedLog.args as RollupCreatedEventAddresses;
       break;
     } catch (err) {
       // Silently continue
     }
   }
 
-  return rollupCreatedLog;
+  return rollupInformation;
+};
+
+export const contractIsERC20 = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  address: `0x${string}`,
+): Promise<boolean> => {
+  const nativeTokenContractBytecode = await orbitHandler.getBytecode(chainLayer, address);
+
+  if (!nativeTokenContractBytecode || nativeTokenContractBytecode == '0x') {
+    return false;
+  }
+
+  return true;
 };
