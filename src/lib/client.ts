@@ -43,6 +43,15 @@ export class OrbitHandler {
     return result;
   };
 
+  getTransaction = async (chainLayer: ChainLayer, transactionHash: `0x${string}`) => {
+    const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    const result = await client.getTransaction({
+      hash: transactionHash,
+    });
+
+    return result;
+  };
+
   getTransactionReceipt = async (chainLayer: ChainLayer, transactionHash: `0x${string}`) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
     const result = await client.getTransactionReceipt({

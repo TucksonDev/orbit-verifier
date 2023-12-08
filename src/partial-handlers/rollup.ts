@@ -6,6 +6,7 @@ import {
   UpgradeExecutorRoles,
   contractIsERC20,
   getCurrentAdminOfContract,
+  getCurrentKeysetsForDAS,
   getRollupInformationFromRollupCreator,
   getUpgradeExecutorPrivilegedAccounts,
 } from '../lib/utils';
@@ -29,6 +30,7 @@ export const rollupHandler = async (
   let proxyAdminAddress = '';
   let upgradeExecutorAddress = '';
   let nativeTokenAddress = '';
+  let isAnyTrust = false;
   try {
     const rollupInformation = (await getRollupInformationFromRollupCreator(
       orbitHandler,
@@ -69,6 +71,21 @@ export const rollupHandler = async (
       // Getting nativeToken if present
       if (rollupInformation.rollupAddresses.nativeToken) {
         nativeTokenAddress = rollupInformation.rollupAddresses.nativeToken;
+      }
+    }
+
+    if (
+      !rollupInformation.rollupParameters ||
+      Object.keys(rollupInformation.rollupParameters).length <= 0
+    ) {
+      warningMessages.push(
+        `createRollup input could not be parsed for RollupCreator ${rollupCreatorAddress}`,
+      );
+    } else {
+      console.log(`Input of createRollup:`, rollupInformation.rollupParameters);
+
+      if (rollupInformation.rollupChainConfig!.arbitrum.DataAvailabilityCommittee) {
+        isAnyTrust = true;
       }
     }
   } catch (err) {
@@ -344,6 +361,44 @@ export const rollupHandler = async (
     }
   }
   console.log('');
+
+  //
+  // DAS verification
+  //
+  if (isAnyTrust) {
+    console.log('AnyTrust verification');
+    console.log('--------------');
+    console.log(`Chain was configured as AnyTrust`);
+    const validKeysets = await getCurrentKeysetsForDAS(
+      orbitHandler,
+      'parent',
+      sequencerInboxAddress,
+    );
+
+    if (!validKeysets || validKeysets.length == 0) {
+      console.log(
+        `Chain is configured as AnyTrust, but no valid Keyset was found on the SequencerInbox`,
+      );
+      warningMessages.push(
+        `Chain is configured as AnyTrust, but no valid Keyset was found on the SequencerInbox`,
+      );
+    } else {
+      console.log(`Valid keysets:`, validKeysets);
+
+      if (validKeysets.length > 1) {
+        console.log(`Multiple valid keysets were found in the SequencerInbox`);
+        warningMessages.push(`Multiple valid keysets were found in the SequencerInbox`);
+      }
+
+      if (
+        validKeysets.includes('0x4d795e20d33eea0b070600e4e100c512a750562bf03c300c99444bd5af92d9b0')
+      ) {
+        console.log(`Found valid keyset for private key = zero address`);
+        warningMessages.push(`Found valid keyset for private key = zero address`);
+      }
+    }
+    console.log('');
+  }
 
   return warningMessages;
 };

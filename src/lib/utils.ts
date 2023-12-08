@@ -1,12 +1,15 @@
 import { ChainLayer, OrbitHandler } from './client';
 import { RollupCore__factory } from '@arbitrum/sdk/dist/lib/abi/factories/RollupCore__factory';
+import { SequencerInbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/SequencerInbox__factory';
 import {
+  Abi,
   AbiEventItem,
   RollupCreatedEventAddresses,
+  RollupCreatorInputParameters,
   RollupInformationFromRollupCreatedEvent,
 } from './types';
-import { supportedRollupCreatedEvents } from './abis';
-import { defineChain, decodeEventLog, getAddress, trim } from 'viem';
+import { supportedCreateRollupAbis, supportedRollupCreatedEvents } from './abis';
+import { defineChain, decodeEventLog, getAddress, trim, decodeFunctionData } from 'viem';
 import { mainnet, arbitrum, arbitrumNova, arbitrumGoerli, arbitrumSepolia } from 'viem/chains';
 
 // Supported Viem chains
@@ -16,6 +19,11 @@ type RoleGrantedLogArgs = {
   role: `0x${string}`;
   account: `0x${string}`;
   sender: `0x${string}`;
+};
+
+type SetValidKeysetLogArgs = {
+  keysetHash: `0x${string}`;
+  keysetBytes: `0x${string}`;
 };
 
 type UpgradeExecutorPrivilegedAccounts = {
@@ -248,7 +256,66 @@ export const getRollupInformationFromRollupCreator = async (
     }
   }
 
+  // Step 5: Get input of the transaction
+  const transaction = await orbitHandler.getTransaction(chainLayer, transactionHash);
+
+  try {
+    const { args } = decodeFunctionData({
+      abi: supportedCreateRollupAbis,
+      data: transaction.input,
+    });
+    const rollupParameters = args![0] as RollupCreatorInputParameters;
+    rollupInformation.rollupParameters = rollupParameters;
+    rollupInformation.rollupChainConfig = JSON.parse(rollupParameters.chainConfig);
+  } catch (err) {
+    // Silently continue
+  }
+
   return rollupInformation;
+};
+
+export const getCurrentKeysetsForDAS = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  sequencerInboxAddress: `0x${string}`,
+): Promise<`0x${string}`[]> => {
+  // Step 1: Get all SetValidKeyset events from the SequencerInbox
+  const setValidKeysetEvents = await orbitHandler.getLogs(
+    chainLayer,
+    sequencerInboxAddress,
+    SequencerInbox__factory.abi.filter(
+      (abiItem) => abiItem.type == 'event' && abiItem.name == 'SetValidKeyset',
+    )[0] as AbiEventItem,
+    undefined,
+    'earliest',
+    'latest',
+  );
+  if (!setValidKeysetEvents || setValidKeysetEvents.length <= 0) {
+    throw new Error(`No SetValidKeyset events found for SequencerInbox ${sequencerInboxAddress}`);
+  }
+
+  // Step 2: Verify which of the keysets is still valid
+  const validKeysets: `0x${string}`[] = [];
+  setValidKeysetEvents.forEach(async (setValidKeysetEvent) => {
+    const keysetHash = (setValidKeysetEvent.args as SetValidKeysetLogArgs).keysetHash;
+    const keysetIsValid = (await orbitHandler.readContract(
+      'parent',
+      sequencerInboxAddress,
+      SequencerInbox__factory.abi as Abi,
+      'isValidKeysetHash',
+      [keysetHash],
+    )) as boolean;
+
+    console.log(keysetHash);
+    if (keysetIsValid) {
+      console.log('Is valid');
+      validKeysets.push(keysetHash);
+    } else {
+      console.log('Is NOT valid');
+    }
+  });
+
+  return validKeysets;
 };
 
 export const contractIsERC20 = async (

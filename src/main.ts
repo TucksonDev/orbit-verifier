@@ -46,13 +46,7 @@ const main = async () => {
   console.log(`Warning messages:`);
   console.log(`*****************`);
   if (warningMessages.length > 0) {
-    console.log(
-      [
-        ...rollupWarningMessages,
-        ...precompilesWarningMessages,
-        ...factoryDeploymentWarningMessages,
-      ].join('\n'),
-    );
+    console.log(warningMessages.join('\n'));
   } else {
     console.log(`No messages`);
   }
