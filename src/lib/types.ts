@@ -47,22 +47,30 @@ export type RollupCreatorInputChainConfigParameters = {
 };
 
 export type RollupCreatorInputParameters = {
-  confirmPeriodBlocks: bigint;
-  extraChallengeTimeBlocks: bigint;
-  stakeToken: `0x${string}`;
-  baseStake: bigint;
-  wasmModuleRoot: `0x${string}`;
-  owner: `0x${string}`;
-  loserStakeEscrow: `0x${string}`;
-  chainId: bigint;
-  chainConfig: string;
-  genesisBlockNum: bigint;
-  sequencerInboxMaxTimeVariation: {
-    delayBlocks: bigint;
-    futureBlocks: bigint;
-    delaySeconds: bigint;
-    futureSeconds: bigint;
+  config: {
+    confirmPeriodBlocks: bigint;
+    extraChallengeTimeBlocks: bigint;
+    stakeToken: `0x${string}`;
+    baseStake: bigint;
+    wasmModuleRoot: `0x${string}`;
+    owner: `0x${string}`;
+    loserStakeEscrow: `0x${string}`;
+    chainId: bigint;
+    chainConfig: string;
+    genesisBlockNum: bigint;
+    sequencerInboxMaxTimeVariation: {
+      delayBlocks: bigint;
+      futureBlocks: bigint;
+      delaySeconds: bigint;
+      futureSeconds: bigint;
+    };
   };
+  batchPoster: `0x${string}`;
+  validators: `0x${string}`[];
+  maxDataSize: bigint;
+  nativeToken: `0x${string}`;
+  deployFactoriesToL2: boolean;
+  maxFeePerGasForRetryables: bigint;
 };
 
 export type RollupCreatedEventAddresses = {
@@ -90,4 +98,72 @@ export type RollupInformationFromRollupCreatedEvent = {
   rollupAddresses?: RollupCreatedEventAddresses;
   rollupParameters?: RollupCreatorInputParameters;
   rollupChainConfig?: RollupCreatorInputChainConfigParameters;
+};
+
+export type TokenBridgeCanonicalAddresses = {
+  router: `0x${string}`;
+  standardGateway: `0x${string}`;
+  customGateway: `0x${string}`;
+  wethGateway: `0x${string}`;
+  weth: `0x${string}`;
+  upgradeExecutor: `0x${string}`;
+  multicall: `0x${string}`;
+  proxyAdmin: `0x${string}`;
+  beaconProxyFactory: `0x${string}`;
+};
+
+export type TokenBridgeRouterInitializedAddresses = {
+  defaultGateway: `0x${string}`;
+  inbox: `0x${string}`;
+  router: `0x${string}`;
+  counterpartGateway: `0x${string}`;
+};
+
+export type TokenBridgeStandardGatewayInitializedAddresses = {
+  counterpartGateway: `0x${string}`;
+  router: `0x${string}`;
+  inbox: `0x${string}`;
+  orbitBeaconProxyFactory: `0x${string}`;
+  cloneableProxyHash: `0x${string}`;
+  whitelist: `0x${string}`;
+};
+
+export type TokenBridgeCustomGatewayInitializedAddresses = {
+  counterpartGateway: `0x${string}`;
+  router: `0x${string}`;
+  inbox: `0x${string}`;
+  whitelist: `0x${string}`;
+};
+
+export type TokenBridgeWethGatewayInitializedAddresses = {
+  counterpartGateway: `0x${string}`;
+  router: `0x${string}`;
+  inbox: `0x${string}`;
+  parentChainWeth: `0x${string}`;
+  orbitChainWeth: `0x${string}`;
+};
+
+export type TokenBridgeOrbitRouterInitializedAddresses = {
+  defaultGateway: `0x${string}`;
+  router: `0x${string}`;
+  counterpartGateway: `0x${string}`;
+};
+
+export type TokenBridgeOrbitStandardGatewayInitializedAddresses = {
+  counterpartGateway: `0x${string}`;
+  router: `0x${string}`;
+  beaconProxyFactory: `0x${string}`;
+  cloneableProxyHash: `0x${string}`;
+};
+
+export type TokenBridgeOrbitCustomGatewayInitializedAddresses = {
+  counterpartGateway: `0x${string}`;
+  router: `0x${string}`;
+};
+
+export type TokenBridgeOrbitWethGatewayInitializedAddresses = {
+  counterpartGateway: `0x${string}`;
+  router: `0x${string}`;
+  parentChainWeth: `0x${string}`;
+  orbitChainWeth: `0x${string}`;
 };

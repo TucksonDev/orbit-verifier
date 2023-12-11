@@ -1,15 +1,43 @@
 import { ChainLayer, OrbitHandler } from './client';
 import { RollupCore__factory } from '@arbitrum/sdk/dist/lib/abi/factories/RollupCore__factory';
 import { SequencerInbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/SequencerInbox__factory';
+import { L1GatewayRouter__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1GatewayRouter__factory';
+import { L2GatewayRouter__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L2GatewayRouter__factory';
+import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory';
+import { L2ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L2ERC20Gateway__factory';
+import { L1CustomGateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1CustomGateway__factory';
+import { L2CustomGateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L2CustomGateway__factory';
+import { L1WethGateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1WethGateway__factory';
+import { L2WethGateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L2WethGateway__factory';
 import {
   Abi,
   AbiEventItem,
   RollupCreatedEventAddresses,
   RollupCreatorInputParameters,
   RollupInformationFromRollupCreatedEvent,
+  TokenBridgeCanonicalAddresses,
+  TokenBridgeCustomGatewayInitializedAddresses,
+  TokenBridgeOrbitCustomGatewayInitializedAddresses,
+  TokenBridgeOrbitRouterInitializedAddresses,
+  TokenBridgeOrbitStandardGatewayInitializedAddresses,
+  TokenBridgeOrbitWethGatewayInitializedAddresses,
+  TokenBridgeRouterInitializedAddresses,
+  TokenBridgeStandardGatewayInitializedAddresses,
+  TokenBridgeWethGatewayInitializedAddresses,
 } from './types';
-import { supportedCreateRollupAbis, supportedRollupCreatedEvents } from './abis';
-import { defineChain, decodeEventLog, getAddress, trim, decodeFunctionData } from 'viem';
+import {
+  TokenBridgeCreatorAbi,
+  supportedCreateRollupAbis,
+  supportedRollupCreatedEvents,
+} from './abis';
+import {
+  defineChain,
+  decodeEventLog,
+  getAddress,
+  trim,
+  decodeFunctionData,
+  zeroAddress,
+} from 'viem';
 import { mainnet, arbitrum, arbitrumNova, arbitrumGoerli, arbitrumSepolia } from 'viem/chains';
 
 // Supported Viem chains
@@ -24,6 +52,17 @@ type RoleGrantedLogArgs = {
 type SetValidKeysetLogArgs = {
   keysetHash: `0x${string}`;
   keysetBytes: `0x${string}`;
+};
+
+type OrbitTokenBridgeCreatedArgs = {
+  inbox: `0x${string}`;
+  owner: `0x${string}`;
+  router: `0x${string}`;
+  standardGateway: `0x${string}`;
+  customGateway: `0x${string}`;
+  wethGateway: `0x${string}`;
+  proxyAdmin: `0x${string}`;
+  upgradeExecutor: `0x${string}`;
 };
 
 type UpgradeExecutorPrivilegedAccounts = {
@@ -195,6 +234,36 @@ export const getCurrentAdminOfContract = async (
   return getAddress(trim(adminAddress));
 };
 
+export const getLogicAddressOfContract = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  contractAddress: `0x${string}`,
+): Promise<`0x${string}` | undefined> => {
+  const slot = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+  const logicContractAddress = await orbitHandler.getStorageAt(chainLayer, contractAddress, slot);
+  if (!logicContractAddress) {
+    return getAddress('0x');
+  }
+  return getAddress(trim(logicContractAddress));
+};
+
+export const contractIsInitialized = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  contractAddress: `0x${string}`,
+): Promise<boolean> => {
+  const slot = '0x0';
+  const storageContents = await orbitHandler.getStorageAt(chainLayer, contractAddress, slot);
+  if (!storageContents) {
+    return false;
+  }
+
+  // Ethereum storage slots are 32 bytes and a uint8 is 1 byte, we mask the lower 8 bits to convert it to uint8.
+  const storageContentsBigNumber = BigInt(storageContents);
+  const maskedValue = storageContentsBigNumber & 255n;
+  return Number(maskedValue) == 1;
+};
+
 //
 // Requiremenets to finding this information:
 //    - Rollup contract should have emitted a RollupInitialized event
@@ -266,7 +335,7 @@ export const getRollupInformationFromRollupCreator = async (
     });
     const rollupParameters = args![0] as RollupCreatorInputParameters;
     rollupInformation.rollupParameters = rollupParameters;
-    rollupInformation.rollupChainConfig = JSON.parse(rollupParameters.chainConfig);
+    rollupInformation.rollupChainConfig = JSON.parse(rollupParameters.config.chainConfig);
   } catch (err) {
     // Silently continue
   }
@@ -291,31 +360,344 @@ export const getCurrentKeysetsForDAS = async (
     'latest',
   );
   if (!setValidKeysetEvents || setValidKeysetEvents.length <= 0) {
-    throw new Error(`No SetValidKeyset events found for SequencerInbox ${sequencerInboxAddress}`);
+    console.log(`No SetValidKeyset events found for SequencerInbox ${sequencerInboxAddress}`);
+    return [];
   }
 
   // Step 2: Verify which of the keysets is still valid
   const validKeysets: `0x${string}`[] = [];
-  setValidKeysetEvents.forEach(async (setValidKeysetEvent) => {
+  for (const setValidKeysetEvent of setValidKeysetEvents) {
     const keysetHash = (setValidKeysetEvent.args as SetValidKeysetLogArgs).keysetHash;
+    // eslint-disable-next-line no-await-in-loop
     const keysetIsValid = (await orbitHandler.readContract(
-      'parent',
+      chainLayer,
       sequencerInboxAddress,
       SequencerInbox__factory.abi as Abi,
       'isValidKeysetHash',
       [keysetHash],
     )) as boolean;
 
-    console.log(keysetHash);
     if (keysetIsValid) {
-      console.log('Is valid');
       validKeysets.push(keysetHash);
-    } else {
-      console.log('Is NOT valid');
     }
-  });
+  }
 
   return validKeysets;
+};
+
+export const getTokenBridgeAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeCreatorAddress: `0x${string}`,
+  inboxAddress: `0x${string}`,
+): Promise<OrbitTokenBridgeCreatedArgs> => {
+  const orbitTokenBridgeCreatedEvents = await orbitHandler.getLogs(
+    chainLayer,
+    tokenBridgeCreatorAddress,
+    TokenBridgeCreatorAbi.filter(
+      (abiItem) => abiItem.type == 'event' && abiItem.name == 'OrbitTokenBridgeCreated',
+    )[0] as AbiEventItem,
+    {
+      inbox: inboxAddress,
+    },
+    'earliest',
+    'latest',
+  );
+  if (!orbitTokenBridgeCreatedEvents || orbitTokenBridgeCreatedEvents.length <= 0) {
+    throw new Error(`
+    No OrbitTokenBridgeCreated events found for Inbox ${inboxAddress} on TokenBridgeCreator ${tokenBridgeCreatorAddress}
+    `);
+  }
+
+  return orbitTokenBridgeCreatedEvents[0].args as OrbitTokenBridgeCreatedArgs;
+};
+
+export const getTokenBridgeCanonicalOrbitAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeCreatorAddress: `0x${string}`,
+  orbitChainId: number,
+  isUsingFeeToken: boolean,
+): Promise<TokenBridgeCanonicalAddresses> => {
+  const [
+    router,
+    standardGateway,
+    customGateway,
+    upgradeExecutor,
+    multicall,
+    proxyAdmin,
+    beaconProxyFactory,
+  ] = await Promise.all(
+    [
+      'getCanonicalL2RouterAddress',
+      'getCanonicalL2StandardGatewayAddress',
+      'getCanonicalL2CustomGatewayAddress',
+      'getCanonicalL2UpgradeExecutorAddress',
+      'getCanonicalL2Multicall',
+      'getCanonicalL2ProxyAdminAddress',
+      'getCanonicalL2BeaconProxyFactoryAddress',
+    ].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeCreatorAddress,
+        TokenBridgeCreatorAbi as Abi,
+        functionName,
+        [orbitChainId],
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  const [wethGateway, weth] = isUsingFeeToken
+    ? [zeroAddress as `0x${string}`, zeroAddress as `0x${string}`]
+    : await Promise.all(
+        ['getCanonicalL2WethGatewayAddress', 'getCanonicalL2WethAddress'].map(
+          async (functionName) => {
+            const address = (await orbitHandler.readContract(
+              chainLayer,
+              tokenBridgeCreatorAddress,
+              TokenBridgeCreatorAbi as Abi,
+              functionName,
+              [orbitChainId],
+            )) as `0x${string}`;
+            return address;
+          },
+        ),
+      );
+
+  return {
+    router,
+    standardGateway,
+    customGateway,
+    wethGateway,
+    weth,
+    upgradeExecutor,
+    multicall,
+    proxyAdmin,
+    beaconProxyFactory,
+  };
+};
+
+export const getTokenBridgeRouterInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeRouterAddress: `0x${string}`,
+): Promise<TokenBridgeRouterInitializedAddresses> => {
+  // Router initialized addresses
+  const [defaultGateway, inbox, router, counterpartGateway] = await Promise.all(
+    ['defaultGateway', 'inbox', 'router', 'counterpartGateway'].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeRouterAddress,
+        L1GatewayRouter__factory.abi as Abi,
+        functionName,
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  return {
+    defaultGateway,
+    inbox,
+    router,
+    counterpartGateway,
+  };
+};
+
+export const getTokenBridgeStandardGatewayInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeStandardGatewayAddress: `0x${string}`,
+): Promise<TokenBridgeStandardGatewayInitializedAddresses> => {
+  // StandardGateway initialized addresses
+  const [
+    counterpartGateway,
+    router,
+    inbox,
+    orbitBeaconProxyFactory,
+    cloneableProxyHash,
+    whitelist,
+  ] = await Promise.all(
+    [
+      'counterpartGateway',
+      'router',
+      'inbox',
+      'l2BeaconProxyFactory',
+      'cloneableProxyHash',
+      'whitelist',
+    ].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeStandardGatewayAddress,
+        L1ERC20Gateway__factory.abi as Abi,
+        functionName,
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  return {
+    counterpartGateway,
+    router,
+    inbox,
+    orbitBeaconProxyFactory,
+    cloneableProxyHash,
+    whitelist,
+  };
+};
+
+export const getTokenBridgeCustomGatewayInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeCustomGatewayAddress: `0x${string}`,
+): Promise<TokenBridgeCustomGatewayInitializedAddresses> => {
+  // StandardGateway initialized addresses
+  const [counterpartGateway, router, inbox, whitelist] = await Promise.all(
+    ['counterpartGateway', 'router', 'inbox', 'whitelist'].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeCustomGatewayAddress,
+        L1CustomGateway__factory.abi as Abi,
+        functionName,
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  return {
+    counterpartGateway,
+    router,
+    inbox,
+    whitelist,
+  };
+};
+
+export const getTokenBridgeWethGatewayInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeWethGatewayAddress: `0x${string}`,
+): Promise<TokenBridgeWethGatewayInitializedAddresses> => {
+  // StandardGateway initialized addresses
+  const [counterpartGateway, router, inbox, parentChainWeth, orbitChainWeth] = await Promise.all(
+    ['counterpartGateway', 'router', 'inbox', 'l1Weth', 'l2Weth'].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeWethGatewayAddress,
+        L1WethGateway__factory.abi as Abi,
+        functionName,
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  return {
+    counterpartGateway,
+    router,
+    inbox,
+    parentChainWeth,
+    orbitChainWeth,
+  };
+};
+
+export const getTokenBridgeOrbitRouterInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeRouterAddress: `0x${string}`,
+): Promise<TokenBridgeOrbitRouterInitializedAddresses> => {
+  // Router initialized addresses
+  const [defaultGateway, router, counterpartGateway] = await Promise.all(
+    ['defaultGateway', 'router', 'counterpartGateway'].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeRouterAddress,
+        L2GatewayRouter__factory.abi as Abi,
+        functionName,
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  return {
+    defaultGateway,
+    router,
+    counterpartGateway,
+  };
+};
+
+export const getTokenBridgeOrbitStandardGatewayInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeStandardGatewayAddress: `0x${string}`,
+): Promise<TokenBridgeOrbitStandardGatewayInitializedAddresses> => {
+  // StandardGateway initialized addresses
+  const [counterpartGateway, router, beaconProxyFactory, cloneableProxyHash] = await Promise.all(
+    ['counterpartGateway', 'router', 'beaconProxyFactory', 'cloneableProxyHash'].map(
+      async (functionName) => {
+        const address = (await orbitHandler.readContract(
+          chainLayer,
+          tokenBridgeStandardGatewayAddress,
+          L2ERC20Gateway__factory.abi as Abi,
+          functionName,
+        )) as `0x${string}`;
+        return address;
+      },
+    ),
+  );
+
+  return {
+    counterpartGateway,
+    router,
+    beaconProxyFactory,
+    cloneableProxyHash,
+  };
+};
+
+export const getTokenBridgeOrbitCustomGatewayInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeCustomGatewayAddress: `0x${string}`,
+): Promise<TokenBridgeOrbitCustomGatewayInitializedAddresses> => {
+  const [counterpartGateway, router] = await Promise.all(
+    ['counterpartGateway', 'router'].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeCustomGatewayAddress,
+        L2CustomGateway__factory.abi as Abi,
+        functionName,
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  return {
+    counterpartGateway,
+    router,
+  };
+};
+
+export const getTokenBridgeOrbitWethGatewayInitializedAddresses = async (
+  orbitHandler: OrbitHandler,
+  chainLayer: ChainLayer,
+  tokenBridgeWethGatewayAddress: `0x${string}`,
+): Promise<TokenBridgeOrbitWethGatewayInitializedAddresses> => {
+  const [counterpartGateway, router, parentChainWeth, orbitChainWeth] = await Promise.all(
+    ['counterpartGateway', 'router', 'l1Weth', 'l2Weth'].map(async (functionName) => {
+      const address = (await orbitHandler.readContract(
+        chainLayer,
+        tokenBridgeWethGatewayAddress,
+        L2WethGateway__factory.abi as Abi,
+        functionName,
+      )) as `0x${string}`;
+      return address;
+    }),
+  );
+
+  return {
+    counterpartGateway,
+    router,
+    parentChainWeth,
+    orbitChainWeth,
+  };
 };
 
 export const contractIsERC20 = async (

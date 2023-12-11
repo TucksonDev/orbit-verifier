@@ -141,22 +141,6 @@ export const rollupHandler = async (
       ),
     );
 
-  /*
-  const [
-    bridgeAdminIsProxyAdmin,
-    inboxAdminIsProxyAdmin,
-    sequencerInboxAdminIsProxyAdmin,
-    outboxAdminIsProxyAdmin,
-  ] = await Promise.all(
-    [bridgeAdmin, inboxAdmin, sequencerInboxAdmin, outboxAdmin].map(async (contractAddress) => {
-      const accountBytecode = await orbitHandler.getBytecode('parent', contractAddress);
-      console.log(accountBytecode?.toString());
-      console.log(ProxyAdmin__factory.bytecode);
-      return accountBytecode && accountBytecode.toString() == ProxyAdmin__factory.bytecode;
-    }),
-  );
-  */
-
   console.log(
     `Rollup owner: ${rollupOwner}${
       upgradeExecutorAddress

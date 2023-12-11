@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "verifyChain": "ts-node src/main.ts"
+    "verifyRollup": "ts-node src/verify-rollup.ts",
+    "verifyTokenBridge": "ts-node src/verify-token-bridge.ts"
   },
   "keywords": [],
   "author": "",

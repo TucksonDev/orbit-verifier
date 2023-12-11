@@ -1,31 +1,40 @@
-import { BlockNumber, BlockTag, GetLogsParameters, Hex, createPublicClient, http } from 'viem';
+import { BlockNumber, BlockTag, Hex, PublicClient, createPublicClient, http } from 'viem';
 import { defineChainInformation, getChainInfoFromChainId } from '../lib/utils';
 import { Abi, AbiEventItem } from './types';
 
 export type ChainLayer = 'parent' | 'orbit';
 
 export class OrbitHandler {
-  parentChainPublicClient;
-  orbitPublicClient;
+  parentChainPublicClient: PublicClient;
+  orbitPublicClient: PublicClient | undefined;
 
-  constructor(parentChainId: number, orbitChainId: number, orbitChainRpc: string) {
-    // Get chains information
+  constructor(parentChainId: number, orbitChainId?: number, orbitChainRpc?: string) {
+    // Create parent chain client
     const parentChainInformation = getChainInfoFromChainId(parentChainId);
-    const orbitChainInformation = defineChainInformation(orbitChainId, orbitChainRpc);
-
-    // Create public clients
     this.parentChainPublicClient = createPublicClient({
       chain: parentChainInformation,
       transport: http(),
     });
-    this.orbitPublicClient = createPublicClient({
-      chain: orbitChainInformation,
-      transport: http(),
-    });
+
+    // Create orbit chain client
+    if (orbitChainId && orbitChainRpc) {
+      const orbitChainInformation = defineChainInformation(orbitChainId, orbitChainRpc);
+      this.orbitPublicClient = createPublicClient({
+        chain: orbitChainInformation,
+        transport: http(),
+      });
+    }
   }
+
+  handlesOrbitChain = () => {
+    return this.orbitPublicClient ? true : false;
+  };
 
   getBytecode = async (chainLayer: ChainLayer, address: `0x${string}`) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    if (!client) {
+      throw new Error(`Client for ${chainLayer} is not defined`);
+    }
     const result = await client.getBytecode({
       address,
     });
@@ -35,6 +44,9 @@ export class OrbitHandler {
 
   getStorageAt = async (chainLayer: ChainLayer, address: `0x${string}`, slot: Hex) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    if (!client) {
+      throw new Error(`Client for ${chainLayer} is not defined`);
+    }
     const result = await client.getStorageAt({
       address,
       slot,
@@ -45,6 +57,9 @@ export class OrbitHandler {
 
   getTransaction = async (chainLayer: ChainLayer, transactionHash: `0x${string}`) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    if (!client) {
+      throw new Error(`Client for ${chainLayer} is not defined`);
+    }
     const result = await client.getTransaction({
       hash: transactionHash,
     });
@@ -54,6 +69,9 @@ export class OrbitHandler {
 
   getTransactionReceipt = async (chainLayer: ChainLayer, transactionHash: `0x${string}`) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    if (!client) {
+      throw new Error(`Client for ${chainLayer} is not defined`);
+    }
     const result = await client.getTransactionReceipt({
       hash: transactionHash,
     });
@@ -69,6 +87,9 @@ export class OrbitHandler {
     args: any[] = [],
   ) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    if (!client) {
+      throw new Error(`Client for ${chainLayer} is not defined`);
+    }
     const result = await client.readContract({
       address,
       abi,
@@ -83,11 +104,14 @@ export class OrbitHandler {
     chainLayer: ChainLayer,
     address: `0x${string}`,
     eventAbi: AbiEventItem,
-    args?: GetLogsParameters,
+    args?: any,
     fromBlock?: BlockNumber | BlockTag,
     toBlock?: BlockNumber | BlockTag,
   ) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    if (!client) {
+      throw new Error(`Client for ${chainLayer} is not defined`);
+    }
     const result = await client.getLogs({
       address,
       event: eventAbi,

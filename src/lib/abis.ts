@@ -1,5 +1,103 @@
 // Missing and other supported ABIs
-import { AbiItem, keccak256, toHex } from 'viem';
+import { Abi, AbiItem, keccak256, toHex } from 'viem';
+
+//
+// TokenBridgeCreator
+//
+export const TokenBridgeCreatorAbi: Abi = [
+  {
+    inputs: [],
+    name: 'retryableSender',
+    outputs: [{ internalType: 'contract L1TokenBridgeRetryableSender', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'inbox', type: 'address' },
+      { indexed: true, internalType: 'address', name: 'owner', type: 'address' },
+      { indexed: false, internalType: 'address', name: 'router', type: 'address' },
+      { indexed: false, internalType: 'address', name: 'standardGateway', type: 'address' },
+      { indexed: false, internalType: 'address', name: 'customGateway', type: 'address' },
+      { indexed: false, internalType: 'address', name: 'wethGateway', type: 'address' },
+      { indexed: false, internalType: 'address', name: 'proxyAdmin', type: 'address' },
+      { indexed: false, internalType: 'address', name: 'upgradeExecutor', type: 'address' },
+    ],
+    name: 'OrbitTokenBridgeCreated',
+    type: 'event',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'inbox', type: 'address' }],
+    name: 'getCanonicalL1RouterAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2BeaconProxyFactoryAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2CustomGatewayAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2Multicall',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2ProxyAdminAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2RouterAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2StandardGatewayAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2UpgradeExecutorAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2WethAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'chainId', type: 'uint256' }],
+    name: 'getCanonicalL2WethGatewayAddress',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+];
 
 //
 // Canonical RollupCreator
