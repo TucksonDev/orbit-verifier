@@ -32,64 +32,72 @@ export const factoryDeploymentsHandler = async (orbitHandler: OrbitHandler): Pro
   //
   const warningMessages: string[] = [];
 
-  //
-  // Get code of all factories and verify that they match
-  //
-  console.log('L2 factories deployments');
-  console.log('--------------');
+  if (orbitHandler.handlesOrbitChain()) {
+    //
+    // Get code of all factories and verify that they match
+    //
+    console.log('L2 factories deployments');
+    console.log('--------------');
 
-  const [
-    nickBytecodeMatches,
-    erc2470BytecodeMatches,
-    zoltuBytecodeMatches,
-    erc1820BytecodeMatches,
-  ] = await Promise.all(
-    [
-      ContractFactoriesInfo.nick,
-      ContractFactoriesInfo.erc2470,
-      ContractFactoriesInfo.zoltu,
-      ContractFactoriesInfo.erc1820,
-    ].map(async (factoryInformation) => {
-      const factoryBytecode = await orbitHandler.getBytecode(
-        'orbit',
-        factoryInformation.address as `0x${string}`,
+    const [
+      nickBytecodeMatches,
+      erc2470BytecodeMatches,
+      zoltuBytecodeMatches,
+      erc1820BytecodeMatches,
+    ] = await Promise.all(
+      [
+        ContractFactoriesInfo.nick,
+        ContractFactoriesInfo.erc2470,
+        ContractFactoriesInfo.zoltu,
+        ContractFactoriesInfo.erc1820,
+      ].map(async (factoryInformation) => {
+        const factoryBytecode = await orbitHandler.getBytecode(
+          'orbit',
+          factoryInformation.address as `0x${string}`,
+        );
+
+        return factoryBytecode == factoryInformation.bytecode;
+      }),
+    );
+
+    if (nickBytecodeMatches) {
+      console.log(`Nick's factory contract is present at ${ContractFactoriesInfo.nick.address}`);
+    } else {
+      console.log(
+        `Nick's factory contract is NOT present at ${ContractFactoriesInfo.nick.address}`,
       );
-
-      return factoryBytecode == factoryInformation.bytecode;
-    }),
-  );
-
-  if (nickBytecodeMatches) {
-    console.log(`Nick's factory contract is present at ${ContractFactoriesInfo.nick.address}`);
-  } else {
-    console.log(`Nick's factory contract is NOT present at ${ContractFactoriesInfo.nick.address}`);
-    warningMessages.push(`Nick's factory contract is missing`);
+      warningMessages.push(`Nick's factory contract is missing`);
+    }
+    if (erc2470BytecodeMatches) {
+      console.log(
+        `ERC-2470 factory contract is present at ${ContractFactoriesInfo.erc2470.address}`,
+      );
+    } else {
+      console.log(
+        `ERC-2470 factory contract is NOT present at ${ContractFactoriesInfo.erc2470.address}`,
+      );
+      warningMessages.push(`ERC-2470 factory contract is missing`);
+    }
+    if (zoltuBytecodeMatches) {
+      console.log(`Zoltu's factory contract is present at ${ContractFactoriesInfo.zoltu.address}`);
+    } else {
+      console.log(
+        `Zoltu's factory contract is NOT present at ${ContractFactoriesInfo.zoltu.address}`,
+      );
+      warningMessages.push(`Zoltu's factory contract is missing`);
+    }
+    if (erc1820BytecodeMatches) {
+      console.log(
+        `ERC-1820 factory contract is present at ${ContractFactoriesInfo.erc1820.address}`,
+      );
+    } else {
+      console.log(
+        `ERC-1820 factory contract is NOT present at ${ContractFactoriesInfo.erc1820.address}`,
+      );
+      warningMessages.push(`ERC-1820 factory contract is missing`);
+    }
+    console.log('');
   }
-  if (erc2470BytecodeMatches) {
-    console.log(`ERC-2470 factory contract is present at ${ContractFactoriesInfo.erc2470.address}`);
-  } else {
-    console.log(
-      `ERC-2470 factory contract is NOT present at ${ContractFactoriesInfo.erc2470.address}`,
-    );
-    warningMessages.push(`ERC-2470 factory contract is missing`);
-  }
-  if (zoltuBytecodeMatches) {
-    console.log(`Zoltu's factory contract is present at ${ContractFactoriesInfo.zoltu.address}`);
-  } else {
-    console.log(
-      `Zoltu's factory contract is NOT present at ${ContractFactoriesInfo.zoltu.address}`,
-    );
-    warningMessages.push(`Zoltu's factory contract is missing`);
-  }
-  if (erc1820BytecodeMatches) {
-    console.log(`ERC-1820 factory contract is present at ${ContractFactoriesInfo.erc1820.address}`);
-  } else {
-    console.log(
-      `ERC-1820 factory contract is NOT present at ${ContractFactoriesInfo.erc1820.address}`,
-    );
-    warningMessages.push(`ERC-1820 factory contract is missing`);
-  }
-  console.log('');
 
   return warningMessages;
 };

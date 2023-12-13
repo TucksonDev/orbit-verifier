@@ -4,22 +4,17 @@ import { precompilesHandler } from './partial-handlers/precompiles';
 import { rollupHandler } from './partial-handlers/rollup';
 import 'dotenv/config';
 
-if (
-  !process.env.ORBIT_CHAIN_ID ||
-  !process.env.ORBIT_CHAIN_RPC ||
-  !process.env.PARENT_CHAIN_ID ||
-  !process.env.ROLLUP_ADDRESS
-) {
+if (!process.env.PARENT_CHAIN_ID || !process.env.ROLLUP_ADDRESS) {
   throw new Error(
-    `The following environmental variables are required: ORBIT_CHAIN_ID, ORBIT_CHAIN_RPC, PARENT_CHAIN_ID, ROLLUP_ADDRESS`,
+    `The following environmental variables are required: PARENT_CHAIN_ID, ROLLUP_ADDRESS`,
   );
 }
 
 // Get the orbit handler
 const orbitHandler = new OrbitHandler(
   Number(process.env.PARENT_CHAIN_ID),
-  Number(process.env.ORBIT_CHAIN_ID),
-  process.env.ORBIT_CHAIN_RPC,
+  process.env.ORBIT_CHAIN_ID ? Number(process.env.ORBIT_CHAIN_ID) : undefined,
+  process.env.ORBIT_CHAIN_RPC ?? undefined,
 );
 
 const main = async () => {
