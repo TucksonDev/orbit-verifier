@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "verifyRollup": "ts-node src/verify-rollup.ts",
-    "verifyTokenBridge": "ts-node src/verify-token-bridge.ts"
+    "verifyTokenBridge": "ts-node src/verify-token-bridge.ts",
+    "findRollups": "ts-node src/find-rollups.ts"
   },
   "keywords": [],
   "author": "",

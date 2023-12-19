@@ -38,10 +38,24 @@ import {
   decodeFunctionData,
   zeroAddress,
 } from 'viem';
-import { mainnet, arbitrum, arbitrumNova, arbitrumGoerli, arbitrumSepolia } from 'viem/chains';
+import {
+  mainnet,
+  sepolia,
+  arbitrum,
+  arbitrumNova,
+  arbitrumGoerli,
+  arbitrumSepolia,
+} from 'viem/chains';
 
 // Supported Viem chains
-const supportedChains = { mainnet, arbitrum, arbitrumNova, arbitrumGoerli, arbitrumSepolia };
+const supportedChains = {
+  mainnet,
+  sepolia,
+  arbitrum,
+  arbitrumNova,
+  arbitrumGoerli,
+  arbitrumSepolia,
+};
 
 type RoleGrantedLogArgs = {
   role: `0x${string}`;
