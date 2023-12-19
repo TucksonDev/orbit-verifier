@@ -1,19 +1,11 @@
 import { createPublicClient, decodeEventLog, http, keccak256, toHex } from 'viem';
-import { getChainInfoFromChainId } from './lib/utils';
+import { getBlockToSearchEventsFrom, getChainInfoFromChainId } from './lib/utils';
 import 'dotenv/config';
 import { AbiEventItem } from './lib/types';
 import { SequencerInbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/SequencerInbox__factory';
 
 // Supported networks
 const supportedChainIds = [1, 42161, 42170];
-
-// Block range to search for recent events (24 hours)
-const blockCountToSearchRecentEventsOnEth = BigInt((24 * 60 * 60) / 12.5);
-const blockCountToSearchRecentEventsOnArb = BigInt((24 * 60 * 60) / 0.25);
-
-// The default RPC for Ethereum on Viem has a restriction of 800 blocks max
-// (this can be solved by defining a custom RPC in the .env file)
-const defaultBlockCountToSearchRecentEventsOnEth = 800n;
 
 type RollupInitializedEventArgs = {
   machineHash: `0x${string}`;
@@ -67,8 +59,7 @@ const SequencerInboxUpdatedEventTopic = keccak256(toHex('SequencerInboxUpdated(a
 const main = async (showInactive: boolean) => {
   for (const chainId of supportedChainIds) {
     const parentChainInformation = getChainInfoFromChainId(chainId);
-    const isArbitrumChain = chainId != 1;
-    const useCustomRPC = chainId == 1 && process.env.ETH_RPC;
+    const useCustomRPC = (chainId == 1 && process.env.ETH_RPC) as boolean;
     const clientTransport = useCustomRPC ? http(process.env.ETH_RPC) : http();
     const parentChainPublicClient = createPublicClient({
       chain: parentChainInformation,
@@ -116,13 +107,7 @@ const main = async (showInactive: boolean) => {
 
           // Get latest events of the contract
           const currentBlock = await parentChainPublicClient.getBlockNumber();
-          const fromBlock =
-            currentBlock -
-            (useCustomRPC
-              ? blockCountToSearchRecentEventsOnEth
-              : isArbitrumChain
-              ? blockCountToSearchRecentEventsOnArb
-              : defaultBlockCountToSearchRecentEventsOnEth);
+          const fromBlock = getBlockToSearchEventsFrom(chainId, currentBlock, useCustomRPC);
           const sequencerBatchDeliveredEventLogs = await parentChainPublicClient.getContractEvents({
             address: rollupInformation.sequencerInboxAddress,
             abi: SequencerInbox__factory.abi,

@@ -57,6 +57,14 @@ const supportedChains = {
   arbitrumSepolia,
 };
 
+// Block range to search for recent events (24 hours)
+const blockCountToSearchRecentEventsOnEth = BigInt((24 * 60 * 60) / 12.5);
+const blockCountToSearchRecentEventsOnArb = BigInt((24 * 60 * 60) / 0.25);
+
+// The default RPC for Ethereum on Viem has a restriction of 800 blocks max
+// (this can be solved by defining a custom RPC in the .env file)
+const defaultBlockCountToSearchRecentEventsOnEth = 800n;
+
 type RoleGrantedLogArgs = {
   role: `0x${string}`;
   account: `0x${string}`;
@@ -173,6 +181,23 @@ export const defineChainInformation = (chainId: number, chainRpc: string) => {
       },
     },
   });
+};
+
+export const getBlockToSearchEventsFrom = (
+  chainId: number,
+  toBlock: bigint,
+  useCustomRpc?: boolean,
+) => {
+  const isArbitrumChain = ![mainnet.id as number, sepolia.id as number].includes(chainId);
+  let blockLimit = blockCountToSearchRecentEventsOnArb;
+
+  if (!isArbitrumChain) {
+    blockLimit = useCustomRpc
+      ? blockCountToSearchRecentEventsOnEth
+      : defaultBlockCountToSearchRecentEventsOnEth;
+  }
+
+  return toBlock - blockLimit;
 };
 
 export const getUpgradeExecutorPrivilegedAccounts = async (

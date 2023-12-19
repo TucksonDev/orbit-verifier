@@ -15,6 +15,9 @@ import { Abi } from '../lib/types';
 // Constants
 //
 const ARB_AGGREGATOR_ADDRESS = '0x000000000000000000000000000000000000006D';
+const defaultSpeedLimit = 7_000_000n;
+const defaultBlockGasLimit = 32_000_000n;
+const defaultBaseFee = 100_000_000n;
 
 export const precompilesHandler = async (orbitHandler: OrbitHandler): Promise<string[]> => {
   //
@@ -91,12 +94,32 @@ export const precompilesHandler = async (orbitHandler: OrbitHandler): Promise<st
     // console.log(`Cost of a simple transaction: ${formatGwei(pricesInWei[0])} gwei`);
     console.log('');
 
+    if (pricesInWei[3] != defaultBaseFee) {
+      warningMessages.push(
+        `Orbit base fee ${formatGwei(
+          pricesInWei[3],
+        )} is different than the default value ${formatGwei(defaultBaseFee)}`,
+      );
+    }
+
     console.log('Gas accounting parameters');
     console.log('--------------');
     console.log(`Orbit speed limit: ${gasAccountingParams[0]} gas per second`);
     console.log(`Orbit transaction gas limit: ${gasAccountingParams[2]} gas units`);
     console.log(`Orbit block gas limit: ${gasAccountingParams[1]} gas units`);
     console.log('');
+
+    if (gasAccountingParams[0] != defaultSpeedLimit) {
+      warningMessages.push(
+        `Orbit speed limit ${gasAccountingParams[0]} is different than the default value ${defaultSpeedLimit}`,
+      );
+    }
+
+    if (gasAccountingParams[1] != defaultBlockGasLimit) {
+      warningMessages.push(
+        `Orbit block gas limit ${gasAccountingParams[1]} is different than the default value ${defaultBlockGasLimit}`,
+      );
+    }
 
     //
     // Information from ArbOwnerPublic

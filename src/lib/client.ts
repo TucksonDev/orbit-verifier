@@ -30,6 +30,10 @@ export class OrbitHandler {
     return this.orbitPublicClient ? true : false;
   };
 
+  getParentChainId = async () => {
+    return this.parentChainPublicClient.getChainId();
+  };
+
   getBytecode = async (chainLayer: ChainLayer, address: `0x${string}`) => {
     const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
     if (!client) {
@@ -120,6 +124,15 @@ export class OrbitHandler {
       toBlock,
     });
 
+    return result;
+  };
+
+  getBlockNumber = async (chainLayer: ChainLayer) => {
+    const client = chainLayer === 'parent' ? this.parentChainPublicClient : this.orbitPublicClient;
+    if (!client) {
+      throw new Error(`Client for ${chainLayer} is not defined`);
+    }
+    const result = await client.getBlockNumber();
     return result;
   };
 }

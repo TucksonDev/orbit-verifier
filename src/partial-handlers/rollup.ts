@@ -1,16 +1,21 @@
 import { RollupCore__factory } from '@arbitrum/sdk/dist/lib/abi/factories/RollupCore__factory';
 import { Ownable__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Ownable__factory';
 import { OrbitHandler } from '../lib/client';
-import { Abi, RollupInformationFromRollupCreatedEvent } from '../lib/types';
+import { Abi, AbiEventItem, RollupInformationFromRollupCreatedEvent } from '../lib/types';
 import {
   UpgradeExecutorRoles,
   contractIsERC20,
+  getBlockToSearchEventsFrom,
   getCurrentAdminOfContract,
   getCurrentKeysetsForDAS,
   getRollupInformationFromRollupCreator,
   getUpgradeExecutorPrivilegedAccounts,
 } from '../lib/utils';
 import { zeroAddress } from 'viem';
+import { SequencerInbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/SequencerInbox__factory';
+
+// Constants
+const minConfirmPeriodBlocks = BigInt((24 * 60 * 60) / 12.5); // 1 day
 
 export const rollupHandler = async (
   orbitHandler: OrbitHandler,
@@ -382,6 +387,82 @@ export const rollupHandler = async (
       }
     }
     console.log('');
+  }
+
+  //
+  // SequencerInbox activity
+  //
+  console.log('SequencerInbox activity');
+  console.log('--------------');
+  const currentBlock = await orbitHandler.getBlockNumber('parent');
+  const fromBlock = getBlockToSearchEventsFrom(await orbitHandler.getParentChainId(), currentBlock);
+  const sequencerBatchDeliveredEventLogs = await orbitHandler.getLogs(
+    'parent',
+    sequencerInboxAddress,
+    SequencerInbox__factory.abi.filter(
+      (abiItem) => abiItem.type == 'event' && abiItem.name == 'SequencerBatchDelivered',
+    )[0] as AbiEventItem,
+    undefined,
+    fromBlock,
+    'latest',
+  );
+  const sequencerInboxIsActive = sequencerBatchDeliveredEventLogs.length > 0;
+  if (sequencerInboxIsActive) {
+    console.log(`SequencerInbox has received batches recently`);
+  } else {
+    console.log(
+      `SequencerInbox ${sequencerInboxAddress} does not seem to be active (no batches posted recently)`,
+    );
+    warningMessages.push(
+      `SequencerInbox ${sequencerInboxAddress} does not seem to be active (no batches posted recently)`,
+    );
+  }
+  console.log('');
+
+  //
+  // Rollup activity
+  //
+  console.log('Rollup activity');
+  console.log('--------------');
+  const nodeCreatedEventLogs = await orbitHandler.getLogs(
+    'parent',
+    rollupAddress,
+    RollupCore__factory.abi.filter(
+      (abiItem) => abiItem.type == 'event' && abiItem.name == 'NodeCreated',
+    )[0] as AbiEventItem,
+    undefined,
+    fromBlock,
+    'latest',
+  );
+  const rollupIsActive = nodeCreatedEventLogs.length > 0;
+  if (rollupIsActive) {
+    console.log(`Rollup has created nodes recently`);
+  } else {
+    console.log(`Rollup ${rollupAddress} does not seem to be active (no nodes created recently)`);
+    warningMessages.push(
+      `Rollup ${rollupAddress} does not seem to be active (no nodes created recently)`,
+    );
+  }
+
+  //
+  // Rollup configuration
+  //
+  console.log('Rollup configuration');
+  console.log('--------------');
+  const confirmPeriodBlocks = (await orbitHandler.readContract(
+    'parent',
+    rollupAddress,
+    RollupCore__factory.abi as Abi,
+    'confirmPeriodBlocks',
+  )) as bigint;
+  console.log(`Challenge period blocks: ${confirmPeriodBlocks}`);
+  if (confirmPeriodBlocks < minConfirmPeriodBlocks) {
+    console.log(
+      `Challenge period blocks ${confirmPeriodBlocks} is lower than the minimum ${minConfirmPeriodBlocks}`,
+    );
+    warningMessages.push(
+      `Challenge period blocks ${confirmPeriodBlocks} is lower than the minimum ${minConfirmPeriodBlocks}`,
+    );
   }
 
   return warningMessages;
