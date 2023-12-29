@@ -443,6 +443,7 @@ export const rollupHandler = async (
       `Rollup ${rollupAddress} does not seem to be active (no nodes created recently)`,
     );
   }
+  console.log('');
 
   //
   // Rollup configuration
@@ -464,6 +465,7 @@ export const rollupHandler = async (
       `Challenge period blocks ${confirmPeriodBlocks} is lower than the minimum ${minConfirmPeriodBlocks}`,
     );
   }
+  console.log('');
 
   return warningMessages;
 };
